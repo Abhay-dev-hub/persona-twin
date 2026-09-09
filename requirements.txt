@@ -1,0 +1,26 @@
+# Step 1: data extraction
+pypdf==5.1.0
+python-docx==1.1.2
+requests==2.32.3
+trafilatura==1.12.2
+beautifulsoup4==4.12.3
+python-multipart==0.0.20
+# Step 1 + 2: LLM calls (image captioning, graph extraction) via OpenRouter
+# uses `requests` above directly — no extra SDK needed
+
+# Step 2: persona knowledge graph
+neo4j==6.2.0
+
+# Step 3: chat backend
+fastapi==0.115.6
+uvicorn==0.34.0
+
+# Config
+python-dotenv==1.0.1
+
+
+# Step 4: vector store
+qdrant-client==1.12.1
+fastembed>=0.5.0
+playwright==1.45.0
+psycopg2-binary==2.9.9
