@@ -319,9 +319,3 @@ from whether a persona is configured at all (`persona_configured`).
 - **Answer quality depends entirely on what's in the graph/vector store.** A persona built from a resume will sound like a resume — see the note in Step 4 about feeding in opinion-rich source material (journals, essays, posts) if you want a persona with an actual voice.
 - The persona prompt explicitly tells the model not to invent facts, names, or events beyond what was retrieved — it's instructed to say "not sure" in-character rather than fabricate.
 - Retrieval runs fresh on every message, based on that message's text alone (not the full conversation) — a very indirect follow-up question might retrieve less-relevant chunks than a self-contained one.
-
-## Next up: Step 6
-
-Tune the persona prompt against real questions — try it out, see where
-tone or accuracy falls short, and refine the retrieval/prompt logic
-based on what you find. Voice is an optional add-on after that.
