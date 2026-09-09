@@ -325,29 +325,3 @@ from whether a persona is configured at all (`persona_configured`).
 Tune the persona prompt against real questions — try it out, see where
 tone or accuracy falls short, and refine the retrieval/prompt logic
 based on what you find. Voice is an optional add-on after that.
-## Deployment (100% Free on Render)
-
-The application is fully containerized and configured to be deployed for free on [Render](https://render.com) using a free PostgreSQL database from [Neon.tech](https://neon.tech).
-
-**1. Set up your Free Postgres Database (Chat History)**
-By default, the app uses a local SQLite database, which is deleted on every restart in serverless/cloud environments. To fix this:
-- Create a free account on [Neon.tech](https://neon.tech/).
-- Create a new project and copy your **Postgres Connection String** (it starts with postgresql://).
-
-**2. Push your code to GitHub**
-Commit all your changes (including the Dockerfile and updated db.py) and push the repository to GitHub.
-
-**3. Deploy to Render**
-- Create a free account on [Render.com](https://render.com/).
-- Click **New** -> **Web Service** -> **Build and deploy from a Git repository**.
-- Connect your GitHub repo.
-- In the deployment settings, make sure the Environment is set to **Docker**.
-- Add the following **Environment Variables**:
-  - DATABASE_URL: Your Neon.tech connection string
-  - OPENROUTER_API_KEY: Your OpenRouter API key
-  - NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD: Your free Neo4j Aura credentials
-  - QDRANT_URL, QDRANT_API_KEY: Your free Qdrant Cloud credentials
-
-Click **Deploy**! Render will build your app and provide you with a live, persistent, and 100% free URL.
-
-*(Note: Render's free tier spins down after 15 minutes of inactivity. When you open the app after it sleeps, it may take ~30 seconds to wake up).*
