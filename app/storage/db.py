@@ -31,7 +31,7 @@ def _connect():
                 self.conn = conn
             def execute(self, query, params=()):
                 query = query.replace("?", "%s")
-                query = query.replace("AUTOINCREMENT", "SERIAL")
+                query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
                 cur = self.conn.cursor()
                 cur.execute(query, params)
                 return cur
