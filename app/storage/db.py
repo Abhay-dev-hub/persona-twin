@@ -58,9 +58,23 @@ def _connect():
 
 def init_db() -> None:
     with _connect() as conn:
+        # User requested wiping the DB to start fresh with user_id
+        try:
+            conn.execute("DROP TABLE IF EXISTS messages CASCADE")
+            conn.execute("DROP TABLE IF EXISTS chats CASCADE")
+            conn.execute("DROP TABLE IF EXISTS personas CASCADE")
+        except:
+            # SQLite doesn't support CASCADE in the same way, try simple drop
+            try:
+                conn.execute("DROP TABLE IF EXISTS messages")
+                conn.execute("DROP TABLE IF EXISTS chats")
+                conn.execute("DROP TABLE IF EXISTS personas")
+            except: pass
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS personas (
                 id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
                 name TEXT NOT NULL,
                 collection_name TEXT NOT NULL UNIQUE,
                 status TEXT NOT NULL DEFAULT 'pending',
@@ -71,6 +85,7 @@ def init_db() -> None:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chats (
                 id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
                 persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
                 title TEXT NOT NULL DEFAULT 'New chat',
                 created_at TEXT NOT NULL
@@ -89,29 +104,30 @@ def init_db() -> None:
 
 # ---------- personas ----------
 
-def create_persona(name: str, collection_name: str) -> dict:
+def create_persona(user_id: str, name: str, collection_name: str) -> dict:
     persona_id = str(uuid.uuid4())
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO personas (id, name, collection_name, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
-            (persona_id, name, collection_name, _now()),
+            "INSERT INTO personas (id, user_id, name, collection_name, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)",
+            (persona_id, user_id, name, collection_name, _now()),
         )
-    return get_persona(persona_id)
+    return get_persona(user_id, persona_id)
 
 
-def get_persona(persona_id: str) -> dict | None:
+def get_persona(user_id: str, persona_id: str) -> dict | None:
     with _connect() as conn:
-        row = conn.execute("SELECT * FROM personas WHERE id = ?", (persona_id,)).fetchone()
+        row = conn.execute("SELECT * FROM personas WHERE id = ? AND user_id = ?", (persona_id, user_id)).fetchone()
         return dict(row) if row else None
 
 
-def list_personas() -> list[dict]:
+def list_personas(user_id: str) -> list[dict]:
     with _connect() as conn:
-        rows = conn.execute("SELECT * FROM personas ORDER BY created_at DESC").fetchall()
+        rows = conn.execute("SELECT * FROM personas WHERE user_id = ? ORDER BY created_at DESC", (user_id,)).fetchall()
         return [dict(r) for r in rows]
 
 
 def update_persona_status(persona_id: str, status: str, error_message: str | None = None) -> None:
+    # No user_id needed here as this is called by background worker
     with _connect() as conn:
         conn.execute(
             "UPDATE personas SET status = ?, error_message = ? WHERE id = ?",
@@ -119,45 +135,45 @@ def update_persona_status(persona_id: str, status: str, error_message: str | Non
         )
 
 
-def delete_persona(persona_id: str) -> None:
+def delete_persona(user_id: str, persona_id: str) -> None:
     with _connect() as conn:
-        conn.execute("DELETE FROM personas WHERE id = ?", (persona_id,))
+        conn.execute("DELETE FROM personas WHERE id = ? AND user_id = ?", (persona_id, user_id))
 
 
 # ---------- chats ----------
 
-def create_chat(persona_id: str, title: str = "New chat") -> dict:
+def create_chat(user_id: str, persona_id: str, title: str = "New chat") -> dict:
     chat_id = str(uuid.uuid4())
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO chats (id, persona_id, title, created_at) VALUES (?, ?, ?, ?)",
-            (chat_id, persona_id, title, _now()),
+            "INSERT INTO chats (id, user_id, persona_id, title, created_at) VALUES (?, ?, ?, ?, ?)",
+            (chat_id, user_id, persona_id, title, _now()),
         )
-    return get_chat(chat_id)
+    return get_chat(user_id, chat_id)
 
 
-def get_chat(chat_id: str) -> dict | None:
+def get_chat(user_id: str, chat_id: str) -> dict | None:
     with _connect() as conn:
-        row = conn.execute("SELECT * FROM chats WHERE id = ?", (chat_id,)).fetchone()
+        row = conn.execute("SELECT * FROM chats WHERE id = ? AND user_id = ?", (chat_id, user_id)).fetchone()
         return dict(row) if row else None
 
 
-def list_chats(persona_id: str) -> list[dict]:
+def list_chats(user_id: str, persona_id: str) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM chats WHERE persona_id = ? ORDER BY created_at DESC", (persona_id,)
+            "SELECT * FROM chats WHERE persona_id = ? AND user_id = ? ORDER BY created_at DESC", (persona_id, user_id)
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def delete_chat(chat_id: str) -> None:
+def delete_chat(user_id: str, chat_id: str) -> None:
     with _connect() as conn:
-        conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+        conn.execute("DELETE FROM chats WHERE id = ? AND user_id = ?", (chat_id, user_id))
 
 
-def rename_chat(chat_id: str, title: str) -> None:
+def rename_chat(user_id: str, chat_id: str, title: str) -> None:
     with _connect() as conn:
-        conn.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
+        conn.execute("UPDATE chats SET title = ? WHERE id = ? AND user_id = ?", (title, chat_id, user_id))
 
 
 # ---------- messages ----------
