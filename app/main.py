@@ -109,6 +109,7 @@ def api_get_persona_profile(persona_id: str, x_user_id: str = Header("anonymous"
 async def api_create_persona(
         name: str,
         files: list[UploadFile] | None = File(default=None),
+        voice_file: UploadFile | None = File(default=None),
         urls: str = Form(""),
         x_user_id: str = Header("anonymous")
 ) -> dict:
@@ -121,7 +122,14 @@ async def api_create_persona(
     if not has_files and not url_list:
         raise HTTPException(status_code=400, detail="at least one file or URL is required")
 
-    persona = register_persona(x_user_id, name)
+    voice_id = None
+    if voice_file and voice_file.filename:
+        from app.tts import clone_voice
+        voice_bytes = await voice_file.read()
+        if voice_bytes:
+            voice_id = clone_voice(voice_bytes, name, voice_file.filename, voice_file.content_type)
+
+    persona = register_persona(x_user_id, name, voice_id)
 
     if has_files:
         raw_dir = UPLOADS_ROOT / persona["id"]
@@ -391,6 +399,39 @@ def retry_last_reply(chat_id: str, x_user_id: str = Header("anonymous")) -> Chat
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
+
+@app.get("/api/tts")
+def api_tts(persona_id: str, text: str, x_user_id: str = Header("anonymous")):
+    from fastapi.responses import StreamingResponse, FileResponse
+    from app.tts import generate_speech
+    import hashlib
+    from pathlib import Path
+    
+    TTS_CACHE_DIR = Path("data/tts_cache")
+    TTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        
+    persona = db.get_persona(x_user_id, persona_id)
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+        
+    if not persona.get("voice_id"):
+        raise HTTPException(status_code=400, detail="This persona does not have a custom voice model (no voice_id).")
+        
+    text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+    cache_file = TTS_CACHE_DIR / f"{persona_id}_{text_hash}.mp3"
+    
+    if cache_file.exists():
+        return FileResponse(cache_file, media_type="audio/mpeg")
+        
+    audio_stream = generate_speech(text, persona["voice_id"])
+    
+    def stream_and_cache():
+        with open(cache_file, "wb") as f:
+            for chunk in audio_stream:
+                f.write(chunk)
+                yield chunk
+
+    return StreamingResponse(stream_and_cache(), media_type="audio/mpeg")
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
