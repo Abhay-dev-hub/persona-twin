@@ -58,19 +58,6 @@ def _connect():
 
 def init_db() -> None:
     with _connect() as conn:
-        # User requested wiping the DB to start fresh with user_id
-        try:
-            conn.execute("DROP TABLE IF EXISTS messages CASCADE")
-            conn.execute("DROP TABLE IF EXISTS chats CASCADE")
-            conn.execute("DROP TABLE IF EXISTS personas CASCADE")
-        except:
-            # SQLite doesn't support CASCADE in the same way, try simple drop
-            try:
-                conn.execute("DROP TABLE IF EXISTS messages")
-                conn.execute("DROP TABLE IF EXISTS chats")
-                conn.execute("DROP TABLE IF EXISTS personas")
-            except: pass
-
         conn.execute("""
             CREATE TABLE IF NOT EXISTS personas (
                 id TEXT PRIMARY KEY,
@@ -79,9 +66,17 @@ def init_db() -> None:
                 collection_name TEXT NOT NULL UNIQUE,
                 status TEXT NOT NULL DEFAULT 'pending',
                 error_message TEXT,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                voice_id TEXT
             )
         """)
+        
+        # Add voice_id column if table already existed without it
+        try:
+            conn.execute("ALTER TABLE personas ADD COLUMN voice_id TEXT")
+        except Exception:
+            pass # Column already exists
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chats (
                 id TEXT PRIMARY KEY,
@@ -104,12 +99,12 @@ def init_db() -> None:
 
 # ---------- personas ----------
 
-def create_persona(user_id: str, name: str, collection_name: str) -> dict:
+def create_persona(user_id: str, name: str, collection_name: str, voice_id: str | None = None) -> dict:
     persona_id = str(uuid.uuid4())
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO personas (id, user_id, name, collection_name, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)",
-            (persona_id, user_id, name, collection_name, _now()),
+            "INSERT INTO personas (id, user_id, name, collection_name, status, created_at, voice_id) VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+            (persona_id, user_id, name, collection_name, _now(), voice_id),
         )
     return get_persona(user_id, persona_id)
 
@@ -195,6 +190,6 @@ def delete_last_assistant_message(chat_id: str) -> None:
 def list_messages(chat_id: str) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT role, content, created_at FROM messages WHERE chat_id = ? ORDER BY id ASC", (chat_id,)
+            "SELECT id, role, content, created_at FROM messages WHERE chat_id = ? ORDER BY id ASC", (chat_id,)
         ).fetchall()
         return [dict(r) for r in rows]
