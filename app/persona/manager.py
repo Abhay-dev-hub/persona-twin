@@ -35,9 +35,9 @@ def unique_collection_name(user_id: str, name: str) -> str:
     return f"{base}_{uuid.uuid4().hex[:6]}"
 
 
-def register_persona(user_id: str, name: str) -> dict:
+def register_persona(user_id: str, name: str, voice_id: str | None = None) -> dict:
     collection_name = unique_collection_name(user_id, name)
-    return db.create_persona(user_id, name, collection_name)
+    return db.create_persona(user_id, name, collection_name, voice_id)
 
 
 def _ensure_worker_running() -> None:
