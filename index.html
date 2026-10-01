@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Persona Twin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F3F3F0;
+    --white: #FFFFFF;
+    --sidebar: #FFFFFF;
+    --border: #E4E2DC;
+    --text: #1E1E1E;
+    --muted: #6B7178;
+    --muted-light: #A5ABB6;
+    --blue: #018BFF;
+    --teal: #00C1B6;
+    --teal-dark: #009999;
+    --green: #2FBF71;
+    --orange: #FF7A45;
+    --danger: #E5484D;
+    --gradient: linear-gradient(135deg, var(--blue), var(--teal));
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'Public Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+  }
+</style>
+
+<script>
+  // Anonymous Sessions: Give every visitor their own private workspace
+  let ptUserId = localStorage.getItem("pt_user_id");
+  if (!ptUserId) {
+      ptUserId = crypto.randomUUID();
+      localStorage.setItem("pt_user_id", ptUserId);
+  }
+
+  const originalFetch = window.fetch;
+  window.fetch = async function() {
+      let [resource, config] = arguments;
+      if (config === undefined) config = {};
+      if (config.headers === undefined) config.headers = {};
+
+      // Inject X-User-ID header natively to all fetch requests
+      if (config.headers instanceof Headers) {
+          config.headers.append('X-User-ID', ptUserId);
+      } else {
+          config.headers['X-User-ID'] = ptUserId;
+      }
+
+      return originalFetch(resource, config);
+  };
+</script>
+
+<style>
+  /* ---------- Sidebar ---------- */
+  #sidebar { width: 288px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; height: 100vh; }
+  #sidebar-header { padding: 20px 18px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  #sidebar-header h1 { font-family: var(--font-display); font-weight: 800; font-size: 20px; margin: 0; letter-spacing: -0.01em; display: flex; align-items: center; gap: 9px; }
+  #sidebar-header h1::before {
+    content: ""; display: inline-block; width: 26px; height: 26px; flex-shrink: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 28 28' fill='none'%3E%3Cline x1='7' y1='7' x2='21' y2='21' stroke='%23018BFF' stroke-width='1.6'/%3E%3Cline x1='21' y1='7' x2='7' y2='21' stroke='%2300C1B6' stroke-width='1.6'/%3E%3Cline x1='14' y1='4' x2='14' y2='24' stroke='%23A5ABB6' stroke-width='1.4' opacity='0.6'/%3E%3Ccircle cx='7' cy='7' r='3.2' fill='%23018BFF'/%3E%3Ccircle cx='21' cy='7' r='3.2' fill='%2300C1B6'/%3E%3Ccircle cx='7' cy='21' r='3.2' fill='%232FBF71'/%3E%3Ccircle cx='21' cy='21' r='3.2' fill='%23FF7A45'/%3E%3Ccircle cx='14' cy='14' r='2.6' fill='%231E1E1E'/%3E%3C/svg%3E");
+    background-size: contain; background-repeat: no-repeat;
+  }
+  .btn { background: var(--gradient); color: white; border: none; padding: 10px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 14px; transition: opacity 0.15s, transform 0.1s; }
+  .btn:hover { opacity: 0.9; } .btn:active { transform: scale(0.98); } .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: var(--white); border: 1px solid var(--border); color: var(--text); }
+  .btn-secondary:hover { background: var(--bg); }
+
+  #persona-list { overflow-y: auto; flex: 1 1 auto; min-height: 60px; padding: 12px 10px; }
+  .persona-item { position: relative; padding: 12px 12px 12px 14px; border-radius: 12px; cursor: pointer; margin-bottom: 4px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 6px; border: 1px solid transparent; transition: background 0.12s, border-color 0.12s; }
+  .persona-item:hover { background: var(--bg); }
+  .persona-item.active { background: #EAF5FF; border-color: #CCE7FF; }
+  .persona-name { font-family: var(--font-body); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .status-badge { font-family: var(--font-mono); font-size: 9px; font-weight: 600; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+  .status-ready { background: rgba(47,191,113,0.14); color: #1C8F53; }
+  .status-pending, .status-processing { background: rgba(1,139,255,0.12); color: var(--blue); }
+  .status-error { background: rgba(229,72,77,0.12); color: var(--danger); }
+  .icon-btn { background: none; border: none; color: var(--muted-light); cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 6px; flex-shrink: 0; }
+  .icon-btn:hover { color: var(--danger); background: rgba(229,72,77,0.1); }
+
+  #chat-history-section { border-top: 1px solid var(--border); flex-shrink: 0; max-height: 45vh; display: flex; flex-direction: column; }
+  #chat-history-header { padding: 16px 18px 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-light); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  #chat-search { margin: 0 14px 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-family: var(--font-body); font-size: 12px; padding: 8px 10px; border-radius: 8px; flex-shrink: 0; }
+  #chat-search:focus { outline: none; border-color: var(--blue); }
+  #chat-list { overflow-y: auto; padding: 0 10px 10px; }
+  .chat-item { padding: 8px 11px; border-radius: 8px; cursor: pointer; font-size: 12px; font-family: var(--font-body); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; gap: 6px; color: var(--muted); }
+  .chat-item:hover { background: var(--bg); color: var(--text); }
+  .chat-item.active { background: #EAF5FF; color: var(--blue); font-weight: 600; }
+  .chat-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+  /* ---------- Main chat area ---------- */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; background: var(--bg); }
+  header { padding: 22px 32px; border-bottom: 1px solid var(--border); background: var(--white); flex-shrink: 0; }
+  header h2 { font-family: var(--font-display); font-weight: 800; font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  header p { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em; color: var(--muted); margin: 6px 0 0; }
+  .header-container { display: flex; justify-content: space-between; align-items: flex-start; }
+
+  #chat { flex: 1; overflow-y: auto; padding: 28px 32px; display: flex; flex-direction: column; gap: 16px; max-width: 760px; margin: 0 auto; width: 100%; }
+  #empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-family: var(--font-body); font-size: 14px; text-align: center; padding: 24px; }
+
+  .msg-row { max-width: min(560px, 82%); }
+  .msg-row.user { align-self: flex-end; margin-left: auto; }
+  .msg-row.assistant { align-self: flex-start; margin-right: auto; }
+
+  .bubble { padding: 13px 17px; line-height: 1.55; font-size: 14.5px; white-space: pre-wrap; border-radius: 16px; width: fit-content; max-width: 100%; }
+  .bubble.user { background: var(--gradient); color: white; margin-left: auto; border-bottom-right-radius: 4px; }
+  .bubble.assistant { background: var(--white); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(30,30,30,0.06); }
+  .bubble.pending { color: var(--muted); font-style: italic; }
+  .bubble.error { color: var(--danger); background: rgba(229,72,77,0.06); border: 1px solid rgba(229,72,77,0.3); font-family: var(--font-mono); font-size: 13px; box-shadow: none; }
+
+  .msg-actions { display: flex; gap: 6px; margin-top: 6px; opacity: 0; transition: opacity 0.15s; }
+  .msg-row.user .msg-actions { justify-content: flex-end; }
+  .msg-row:hover .msg-actions { opacity: 1; }
+  .msg-act { background: var(--white); border: 1px solid var(--border); color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.03em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+  .msg-act:hover { color: var(--blue); border-color: var(--blue); }
+  .msg-act.active { color: var(--blue); border-color: var(--blue); background: #EAF5FF; }
+  .msg-act:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ---------- Input bar ---------- */
+  form#chat-form { display: flex; gap: 10px; padding: 18px 32px 24px; border-top: 1px solid var(--border); max-width: 760px; margin: 0 auto; width: 100%; flex-shrink: 0; }
+  input[type=text] { flex: 1; background: var(--white); border: 1px solid var(--border); color: var(--text); padding: 13px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 14px; }
+  input:focus { outline: none; border-color: var(--blue); }
+  #send-btn { width: auto !important; margin-top: 0 !important; padding: 0 26px !important; }
+  #mic-btn, #attach-btn { background: var(--white); border: 1px solid var(--border); color: var(--muted); padding: 0 18px; border-radius: 999px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; flex-shrink: 0; }
+  #mic-btn:hover, #attach-btn:hover { color: var(--blue); border-color: var(--blue); }
+  #mic-btn.listening { color: white; background: var(--danger); border-color: var(--danger); }
+
+  /* ---------- Modals ---------- */
+  #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(30,30,30,0.45); align-items: center; justify-content: center; z-index: 10; }
+  #modal-overlay.open { display: flex; }
+  #modal { background: var(--white); border: 1px solid var(--border); border-radius: 20px; padding: 28px; width: 400px; max-width: 90vw; box-shadow: 0 20px 60px rgba(30,30,30,0.2); }
+  #modal h3 { font-family: var(--font-display); font-weight: 800; margin: 0; font-size: 19px; }
+  #modal h3::after { content: "Give it a name and drop in source material"; display: block; font-family: var(--font-body); font-weight: 400; font-size: 12.5px; color: var(--muted); margin: 6px 0 20px; }
+  #modal label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 7px; }
+  #modal input[type=text] { width: 100%; margin-bottom: 18px; border-radius: 10px; }
+  #modal input[type=file] { width: 100%; margin-bottom: 18px; font-size: 12px; font-family: var(--font-body); color: var(--muted); }
+  #modal textarea { width: 100%; margin-bottom: 18px; background: var(--white); border: 1px solid var(--border); color: var(--text); font-family: var(--font-body); font-size: 12.5px; padding: 10px 12px; border-radius: 10px; resize: vertical; }
+  #modal textarea:focus { outline: none; border-color: var(--blue); }
+  #modal-actions { display: flex; gap: 8px; margin-top: 8px; }
+  #modal-actions .btn { margin-top: 0; }
+  #modal-error { color: var(--danger); font-family: var(--font-mono); font-size: 12px; margin-bottom: 12px; display: none; }
+
+  /* ---------- Toasts ---------- */
+  #toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 20; max-width: 320px; }
+  .toast { background: var(--white); border: 1px solid var(--border); border-left: 3px solid var(--blue); border-radius: 12px; padding: 12px 14px; font-family: var(--font-body); font-size: 12.5px; display: flex; align-items: center; gap: 10px; box-shadow: 0 8px 24px rgba(30,30,30,0.12); }
+  .toast.success { border-left-color: var(--green); }
+  .toast.error { border-left-color: var(--danger); }
+  .toast.info { border-left-color: var(--muted-light); }
+  .spinner { width: 13px; height: 13px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; flex-shrink: 0; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast-text { flex: 1; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .toast-close { background: none; border: none; color: var(--muted-light); cursor: pointer; font-size: 13px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>Persona Twin</h1>
+    <button class="btn" id="new-persona-btn">+ New Persona</button>
+  </div>
+  <div id="persona-list"></div>
+  <div id="chat-history-section" style="display:none;">
+    <div id="chat-history-header">
+      <span>Chats</span>
+      <button class="icon-btn" id="new-chat-btn" title="New chat" style="font-size:16px;">+</button>
+    </div>
+    <input type="text" id="chat-search" placeholder="Search chats..." />
+    <div id="chat-list"></div>
+  </div>
+</div>
+
+<div id="main">
+  <header class="header-container">
+    <div>
+      <h2 id="main-title">Select or create a persona</h2>
+      <p id="main-subtitle"></p>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn btn-secondary" id="view-data-btn" style="width: auto; display: none; margin-top: 0;">View Data</button>
+      <button class="btn btn-secondary" id="add-data-btn" style="width: auto; display: none; margin-top: 0;">+ Add Data</button>
+    </div>
+  </header>
+
+  <div id="empty-state">Pick a persona on the left, or create a new one, to start chatting.</div>
+  <div id="chat" style="display:none;"></div>
+
+  <form id="chat-form" style="display:none;">
+    <button type="button" id="attach-btn" title="Attach file">📎</button>
+    <input type="file" id="chat-file-input" style="display: none;" />
+    <button type="button" id="mic-btn" title="Voice input">Mic</button>
+    <input id="chat-input" type="text" placeholder="Type a message..." autocomplete="off" />
+    <button type="submit" class="btn" id="send-btn" style="width:auto; padding:10px 20px;">Send</button>
+  </form>
+</div>
+
+<div id="modal-overlay">
+  <div id="modal">
+    <h3 id="modal-title">New Persona</h3>
+    <div id="modal-error"></div>
+    <div id="modal-name-group">
+      <label>Persona name</label>
+      <input type="text" id="modal-name" placeholder="e.g. Jane Doe" />
+    </div>
+    <label>Source material (docs, images, txt/md — you can select multiple)</label>
+    <input type="file" id="modal-files" multiple />
+    <label>Voice sample (optional — upload mp3/wav to clone voice)</label>
+    <input type="file" id="modal-voice-file" accept="audio/*" />
+    <label>Website links (optional — one per line)</label>
+    <textarea id="modal-urls" placeholder="https://example.com/about-me&#10;https://example.com/blog-post" rows="3"></textarea>
+    <div id="modal-actions">
+      <button class="btn" id="modal-create-btn" style="flex:1;">Create</button>
+      <button class="btn btn-secondary" id="modal-cancel-btn" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="profile-modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(30,30,30,0.45); align-items: center; justify-content: center; z-index: 10;">
+  <div id="profile-modal" style="background: var(--white); border: 1px solid var(--border); border-radius: 20px; padding: 28px; width: 600px; max-width: 90vw; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(30,30,30,0.2);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-shrink: 0;">
+      <h3 style="font-family: var(--font-display); font-weight: 800; margin: 0; font-size: 19px;">Persona Data</h3>
+      <button class="icon-btn" id="profile-modal-close" style="font-size: 18px;">✕</button>
+    </div>
+    <div id="profile-modal-content" style="overflow-y: auto; flex: 1; font-family: var(--font-body); font-size: 13.5px; color: var(--text);">
+      <!-- Data injects here -->
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+  const personaListEl = document.getElementById("persona-list");
+  const chatHistorySection = document.getElementById("chat-history-section");
+  const chatListEl = document.getElementById("chat-list");
+  const chatEl = document.getElementById("chat");
+  const emptyStateEl = document.getElementById("empty-state");
+  const chatFormEl = document.getElementById("chat-form");
+  const chatInputEl = document.getElementById("chat-input");
+  const sendBtnEl = document.getElementById("send-btn");
+  const mainTitleEl = document.getElementById("main-title");
+  const mainSubtitleEl = document.getElementById("main-subtitle");
+
+  const modalOverlay = document.getElementById("modal-overlay");
+  const modalNameGroup = document.getElementById("modal-name-group");
+  const modalName = document.getElementById("modal-name");
+  const modalFiles = document.getElementById("modal-files");
+  const modalUrls = document.getElementById("modal-urls");
+  const modalError = document.getElementById("modal-error");
+  const modalCreateBtn = document.getElementById("modal-create-btn");
+  const modalTitle = document.getElementById("modal-title");
+
+  const attachBtn = document.getElementById("attach-btn");
+  const chatFileInput = document.getElementById("chat-file-input");
+
+  let personas = [];
+  let currentPersonaId = null;
+  let currentChatId = null;
+  let pollTimer = null;
+  let lastKnownStatus = {};
+  let dismissedToasts = new Set();
+  let allChats = [];
+
+  // ---------- Personas ----------
+  async function loadPersonas() {
+    const res = await fetch("/api/personas");
+    personas = await res.json();
+    renderPersonaList();
+    renderToasts();
+
+    const anyProcessing = personas.some(p => p.status === "pending" || p.status === "processing");
+    if (anyProcessing && !pollTimer) {
+      pollTimer = setInterval(loadPersonas, 3000);
+    } else if (!anyProcessing && pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function renderToasts() {
+    const container = document.getElementById("toast-container");
+    container.innerHTML = "";
+    for (const p of personas) {
+      const prevStatus = lastKnownStatus[p.id];
+      lastKnownStatus[p.id] = p.status;
+      const isActive = p.status === "pending" || p.status === "processing";
+      const justFinished = (prevStatus === "processing" || prevStatus === "pending") && (p.status === "ready" || p.status === "error");
+      if (dismissedToasts.has(p.id) && !justFinished) continue;
+      if (justFinished) dismissedToasts.delete(p.id);
+      if (!isActive && !justFinished) continue;
+
+      const toast = document.createElement("div");
+      toast.className = "toast" + (p.status === "ready" && justFinished ? " success" : p.status === "error" ? " error" : "");
+      if (isActive) {
+        const spinner = document.createElement("div"); spinner.className = "spinner"; toast.appendChild(spinner);
+      }
+      const text = document.createElement("div"); text.className = "toast-text";
+      if (p.status === "pending") text.textContent = `Queued: "${p.name}"...`;
+      else if (p.status === "processing") text.textContent = `Processing "${p.name}"... this can take a few minutes.`;
+      else if (p.status === "ready") text.textContent = `"${p.name}" is ready!`;
+      else if (p.status === "error") text.textContent = `"${p.name}" failed: ${p.error_message || "unknown error"}`;
+      toast.appendChild(text);
+
+      const closeBtn = document.createElement("button"); closeBtn.className = "toast-close"; closeBtn.textContent = "✕";
+      closeBtn.onclick = () => { dismissedToasts.add(p.id); renderToasts(); }; toast.appendChild(closeBtn);
+      container.appendChild(toast);
+
+      if (!isActive) setTimeout(() => { dismissedToasts.add(p.id); renderToasts(); }, 8000);
+    }
+  }
+
+  function renderPersonaList() {
+    personaListEl.innerHTML = "";
+    for (const p of personas) {
+      const item = document.createElement("div");
+      item.className = "persona-item" + (p.id === currentPersonaId ? " active" : "");
+      const nameSpan = document.createElement("span"); nameSpan.className = "persona-name"; nameSpan.textContent = p.name;
+      const badge = document.createElement("span"); badge.className = `status-badge status-${p.status}`; badge.textContent = p.status;
+      if (p.status === "error") badge.title = p.error_message || "Unknown error";
+      const delBtn = document.createElement("button"); delBtn.className = "icon-btn"; delBtn.textContent = "✕"; delBtn.title = "Delete persona";
+      delBtn.onclick = (e) => { e.stopPropagation(); deletePersona(p.id); };
+      item.appendChild(nameSpan); item.appendChild(badge); item.appendChild(delBtn);
+      item.onclick = () => selectPersona(p.id); personaListEl.appendChild(item);
+    }
+  }
+
+  async function selectPersona(personaId) {
+    currentPersonaId = personaId;
+    currentChatId = null;
+    renderPersonaList();
+    const persona = personas.find(p => p.id === personaId);
+    mainTitleEl.textContent = persona.name;
+    mainSubtitleEl.textContent = persona.status === "ready" ? "Grounded in this persona's knowledge graph and source material." : `Status: ${persona.status}${persona.status === "error" ? " — " + (persona.error_message || "") : ""}`;
+    chatHistorySection.style.display = "flex";
+    document.getElementById("add-data-btn").style.display = "block";
+    document.getElementById("view-data-btn").style.display = "block";
+    showEmptyState();
+    await loadChats();
+  }
+
+  async function deletePersona(personaId) {
+    if (!confirm("Delete this persona and its chat history? This can't be undone.")) return;
+    await fetch(`/api/personas/${personaId}`, { method: "DELETE" });
+    if (currentPersonaId === personaId) {
+      currentPersonaId = null; currentChatId = null; chatHistorySection.style.display = "none";
+      document.getElementById("add-data-btn").style.display = "none";
+      document.getElementById("view-data-btn").style.display = "none";
+      mainTitleEl.textContent = "Select or create a persona"; mainSubtitleEl.textContent = ""; showEmptyState();
+    }
+    await loadPersonas();
+  }
+
+  // ---------- Chats ----------
+  async function loadChats() {
+    const res = await fetch(`/api/chats?persona_id=${currentPersonaId}`);
+    allChats = await res.json();
+    renderChatList();
+  }
+
+  function renderChatList() {
+    const filter = document.getElementById("chat-search").value.trim().toLowerCase();
+    const filtered = filter ? allChats.filter(c => c.title.toLowerCase().includes(filter)) : allChats;
+    chatListEl.innerHTML = "";
+    for (const c of filtered) {
+      const item = document.createElement("div"); item.className = "chat-item" + (c.id === currentChatId ? " active" : "");
+      const titleSpan = document.createElement("span"); titleSpan.className = "chat-title"; titleSpan.textContent = c.title;
+      const delBtn = document.createElement("button"); delBtn.className = "icon-btn"; delBtn.textContent = "✕"; delBtn.title = "Delete chat";
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteChat(c.id); };
+      item.appendChild(titleSpan); item.appendChild(delBtn); item.onclick = () => openChat(c.id); chatListEl.appendChild(item);
+    }
+  }
+
+  document.getElementById("chat-search").addEventListener("input", renderChatList);
+
+  async function createNewChat() {
+    if (!currentPersonaId) return;
+    const res = await fetch("/api/chats", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ persona_id: currentPersonaId, title: "New chat" }) });
+    const chat = await res.json(); await loadChats(); openChat(chat.id);
+  }
+
+  async function deleteChat(chatId) {
+    await fetch(`/api/chats/${chatId}`, { method: "DELETE" });
+    if (currentChatId === chatId) { currentChatId = null; showEmptyState(); }
+    await loadChats();
+  }
+
+  async function openChat(chatId) {
+    currentChatId = chatId; await loadChats();
+    chatEl.innerHTML = ""; chatEl.style.display = "flex"; emptyStateEl.style.display = "none"; chatFormEl.style.display = "flex";
+    const res = await fetch(`/api/chats/${chatId}/messages`); const messages = await res.json();
+    let lastAssistantHandle = null;
+    for (const m of messages) {
+      const handle = createBubble(m.role, m.content); addActionBar(handle, m.role, () => handle.textSpan.textContent);
+      if (m.role === "assistant") lastAssistantHandle = handle;
+    }
+    if (lastAssistantHandle) addRetryButton(lastAssistantHandle, chatId);
+    chatInputEl.focus();
+  }
+
+  function showEmptyState() {
+    chatEl.style.display = "none"; chatFormEl.style.display = "none"; emptyStateEl.style.display = "flex";
+    emptyStateEl.textContent = currentPersonaId ? "Start a new chat with this persona using the + button above." : "Pick a persona on the left, or create a new one, to start chatting.";
+  }
+
+  function createBubble(role, text, extraClass) {
+    const row = document.createElement("div"); row.className = `msg-row ${role}`;
+    const bubble = document.createElement("div"); bubble.className = `bubble ${role}${extraClass ? " " + extraClass : ""}`;
+    const textSpan = document.createElement("span"); textSpan.className = "bubble-text"; textSpan.textContent = text;
+    bubble.appendChild(textSpan); row.appendChild(bubble); chatEl.appendChild(row); chatEl.scrollTop = chatEl.scrollHeight;
+    return { row, bubble, textSpan };
+  }
+
+  function setBubbleState(handle, { pending, error } = {}) { handle.bubble.classList.toggle("pending", !!pending); handle.bubble.classList.toggle("error", !!error); }
+
+  function showToast(message, kind) {
+    const container = document.getElementById("toast-container"); const toast = document.createElement("div"); toast.className = "toast" + (kind ? ` ${kind}` : " info");
+    const text = document.createElement("div"); text.className = "toast-text"; text.textContent = message; toast.appendChild(text); container.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
+  }
+
+  function addActionBar(handle, role, getText) {
+    const bar = document.createElement("div"); bar.className = "msg-actions";
+    const copyBtn = document.createElement("button"); copyBtn.className = "msg-act"; copyBtn.title = "Copy"; copyBtn.textContent = "Copy";
+    copyBtn.onclick = () => { navigator.clipboard.writeText(getText()).then(() => showToast("Copied to clipboard")); };
+    bar.appendChild(copyBtn);
+    if (role === "assistant") {
+      const speakBtn = document.createElement("button"); speakBtn.className = "msg-act"; speakBtn.title = "Read aloud"; speakBtn.textContent = "Listen";
+      speakBtn.onclick = () => toggleReadAloud(getText(), speakBtn); bar.appendChild(speakBtn);
+    }
+    handle.row.appendChild(bar); return bar;
+  }
+
+  let currentAudio = null; let speakingBtn = null;
+  function toggleReadAloud(text, btn) {
+    const wasSpeaking = speakingBtn === btn;
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+    if (speakingBtn) { speakingBtn.textContent = "Listen"; speakingBtn.classList.remove("active"); }
+    speakingBtn = null;
+    if (wasSpeaking) return;
+
+    // Use our custom backend TTS with the persona ID. If it fails, fallback to browser TTS.
+    const url = `/api/tts?persona_id=${currentPersonaId}&text=${encodeURIComponent(text)}`;
+    
+    currentAudio = new Audio();
+    currentAudio.src = url;
+    currentAudio.headers = { "X-User-ID": ptUserId }; // Audio tags don't easily send custom headers, but fetch interception handles our API anyway? Wait, <audio> src doesn't go through window.fetch!
+    
+    // Instead of setting src directly (which skips our fetch monkeypatch and X-User-ID header), we fetch the blob.
+    speakingBtn = btn; btn.textContent = "Loading..."; btn.classList.add("active");
+    
+    fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error("No custom voice available.");
+        return res.blob();
+      })
+      .then(blob => {
+        if (speakingBtn !== btn) return; // User stopped it while loading
+        const blobUrl = URL.createObjectURL(blob);
+        currentAudio.src = blobUrl;
+        currentAudio.onended = () => { if (speakingBtn === btn) { btn.textContent = "Listen"; btn.classList.remove("active"); speakingBtn = null; } };
+        currentAudio.play();
+        btn.textContent = "Stop";
+      })
+      .catch(err => {
+        // Fallback to browser TTS if no custom voice cloned
+        console.warn(err);
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.onend = () => { if (speakingBtn === btn) { btn.textContent = "Listen"; btn.classList.remove("active"); speakingBtn = null; } };
+        btn.textContent = "Stop";
+        window.speechSynthesis.speak(utter);
+        currentAudio = { pause: () => window.speechSynthesis.cancel() }; // fake audio object to allow stopping
+      });
+  }
+
+  function addRetryButton(handle, chatId) {
+    document.querySelectorAll(".retry-btn").forEach(b => b.remove());
+    const bar = handle.row.querySelector(".msg-actions"); if (!bar) return;
+    const retryBtn = document.createElement("button"); retryBtn.className = "msg-act retry-btn"; retryBtn.title = "Regenerate this reply"; retryBtn.textContent = "Retry";
+    retryBtn.onclick = async () => {
+      retryBtn.disabled = true; setBubbleState(handle, { pending: true }); handle.textSpan.textContent = "Regenerating...";
+      try {
+        const res = await fetch(`/api/chats/${chatId}/retry`, { method: "POST" }); const data = await res.json();
+        if (!res.ok) { handle.textSpan.textContent = `Error: ${data.detail || res.statusText}`; setBubbleState(handle, { error: true }); return; }
+        handle.textSpan.textContent = data.reply; setBubbleState(handle, {});
+      } catch (err) { handle.textSpan.textContent = `Network error: ${err.message}`; setBubbleState(handle, { error: true }); }
+      finally { retryBtn.disabled = false; }
+    }; bar.appendChild(retryBtn);
+  }
+
+  // ---------- Sending messages & files ----------
+  attachBtn.addEventListener("click", () => chatFileInput.click());
+
+  chatFileInput.addEventListener("change", () => {
+    if (chatFileInput.files.length > 0) {
+      chatInputEl.placeholder = `Attached: ${chatFileInput.files[0].name} (Type to add message)`;
+      chatInputEl.focus();
+    }
+  });
+
+  chatFormEl.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const message = chatInputEl.value.trim();
+    const file = chatFileInput.files[0];
+
+    if (!message && !file) return;
+    if (!currentChatId) return;
+    document.querySelectorAll(".retry-btn").forEach(b => b.remove());
+
+    const displayMessage = file ? `📎 ${file.name}\n${message}` : message;
+    const userHandle = createBubble("user", displayMessage);
+    addActionBar(userHandle, "user", () => userHandle.textSpan.textContent);
+
+    chatInputEl.value = ""; chatInputEl.placeholder = "Type a message..."; chatInputEl.disabled = true; sendBtnEl.disabled = true; attachBtn.disabled = true;
+    const pendingHandle = createBubble("assistant", "Thinking...", "pending");
+    const chatIdAtSendTime = currentChatId;
+
+    try {
+      let res;
+      if (file) {
+        const formData = new FormData(); formData.append("chat_id", currentChatId); formData.append("message", message); formData.append("file", file);
+        res = await fetch("/api/chat/file", { method: "POST", body: formData }); chatFileInput.value = "";
+      } else {
+        res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: currentChatId, message }) });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || res.statusText);
+
+      pendingHandle.textSpan.textContent = data.reply; setBubbleState(pendingHandle, {});
+      addActionBar(pendingHandle, "assistant", () => pendingHandle.textSpan.textContent); addRetryButton(pendingHandle, chatIdAtSendTime); loadChats();
+    } catch (err) {
+      pendingHandle.textSpan.textContent = `Error: ${err.message}`; setBubbleState(pendingHandle, { error: true });
+    } finally { chatInputEl.disabled = false; sendBtnEl.disabled = false; attachBtn.disabled = false; chatInputEl.focus(); }
+  });
+
+  document.getElementById("new-chat-btn").addEventListener("click", createNewChat);
+
+  // ---------- Voice input ----------
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = document.getElementById("mic-btn"); let recognition = null; let listening = false;
+  if (SpeechRecognitionImpl) {
+    recognition = new SpeechRecognitionImpl(); recognition.continuous = false; recognition.interimResults = false; recognition.lang = navigator.language || "en-US";
+    recognition.onresult = (event) => { chatInputEl.value = event.results[0][0].transcript; chatInputEl.focus(); };
+    recognition.onerror = () => showToast("Voice input error");
+    recognition.onend = () => { listening = false; micBtn.classList.remove("listening"); };
+    micBtn.addEventListener("click", () => { if (listening) { recognition.stop(); } else { listening = true; micBtn.classList.add("listening"); recognition.start(); } });
+  } else { micBtn.addEventListener("click", () => showToast("Voice input unsupported")); }
+
+  // ---------- Modals ----------
+  function openModal() { modalError.style.display = "none"; modalOverlay.classList.add("open"); }
+  function closeModal() { modalOverlay.classList.remove("open"); }
+
+  // New Persona
+  document.getElementById("new-persona-btn").addEventListener("click", () => {
+    modalTitle.textContent = "New Persona"; modalNameGroup.style.display = "block"; modalName.value = ""; modalFiles.value = ""; document.getElementById("modal-voice-file").value = ""; modalUrls.value = "";
+    document.getElementById("modal-create-btn").textContent = "Create"; openModal();
+
+    modalCreateBtn.onclick = async () => {
+      const name = modalName.value.trim(); const files = modalFiles.files; const urlsText = modalUrls.value.trim();
+      if (!name) { modalError.textContent = "Please enter a persona name."; modalError.style.display = "block"; return; }
+      if ((!files || files.length === 0) && !urlsText) { modalError.textContent = "Please select at least one file or add a link."; modalError.style.display = "block"; return; }
+
+      modalCreateBtn.disabled = true; modalCreateBtn.textContent = "Creating...";
+      const formData = new FormData(); 
+      if(files) for (const f of files) formData.append("files", f); 
+      formData.append("urls", urlsText);
+      const voiceFile = document.getElementById("modal-voice-file").files[0];
+      if (voiceFile) formData.append("voice_file", voiceFile);
+
+      try {
+        const res = await fetch(`/api/personas?name=${encodeURIComponent(name)}`, { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok) { let errMsg = data.detail || "Something went wrong."; if (Array.isArray(data.detail)) { errMsg = data.detail.map(e => e.msg).join(', '); } modalError.textContent = errMsg; modalError.style.display = "block"; return; }
+        closeModal(); await loadPersonas(); selectPersona(data.id);
+      } catch (err) { modalError.textContent = `Network error: ${err.message}`; modalError.style.display = "block"; }
+      finally { modalCreateBtn.disabled = false; modalCreateBtn.textContent = "Create"; }
+    };
+  });
+
+  document.getElementById("modal-cancel-btn").addEventListener("click", closeModal);
+
+  // Add Data
+  document.getElementById("add-data-btn").addEventListener("click", () => {
+    modalTitle.textContent = "Add Data to Persona"; modalNameGroup.style.display = "none"; modalFiles.value = ""; modalUrls.value = "";
+    document.getElementById("modal-create-btn").textContent = "Upload & Train"; openModal();
+
+    modalCreateBtn.onclick = async () => {
+        const files = modalFiles.files; const urlsText = modalUrls.value.trim();
+        if ((!files || files.length === 0) && !urlsText) { modalError.textContent = "Please select a file or add a link."; modalError.style.display = "block"; return; }
+
+        modalCreateBtn.disabled = true;
+        const formData = new FormData(); if (files) for (const f of files) formData.append("files", f); formData.append("urls", urlsText);
+
+        try {
+            const res = await fetch(`/api/personas/${currentPersonaId}/data`, { method: "POST", body: formData });
+            if (!res.ok) throw new Error("Failed to add data");
+            closeModal(); loadPersonas();
+        } catch(err) { modalError.textContent = err.message; modalError.style.display = "block"; }
+        finally { modalCreateBtn.disabled = false; }
+    };
+  });
+
+  // View Data Modal
+  const viewDataBtn = document.getElementById("view-data-btn");
+  const profileModalOverlay = document.getElementById("profile-modal-overlay");
+  const profileModalClose = document.getElementById("profile-modal-close");
+  const profileModalContent = document.getElementById("profile-modal-content");
+
+  viewDataBtn.addEventListener("click", async () => {
+    profileModalOverlay.style.display = "flex";
+    profileModalContent.innerHTML = '<div style="text-align: center; color: var(--muted); padding: 20px;">Loading knowledge graph...</div>';
+
+    try {
+      const res = await fetch(`/api/personas/${currentPersonaId}/profile`);
+      if (!res.ok) throw new Error("Failed to load profile data");
+      const data = await res.json();
+
+      let html = "";
+      const renderSection = (title, items, formatFn) => {
+          if (!items || items.length === 0) return "";
+          let sectionHtml = `<h4 style="margin: 18px 0 8px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; color: var(--muted-light); border-bottom: 1px solid var(--border); padding-bottom: 4px;">${title}</h4><ul style="margin: 0; padding-left: 20px; line-height: 1.6;">`;
+          items.forEach(item => { sectionHtml += `<li style="margin-bottom: 8px;">${formatFn(item)}</li>`; });
+          sectionHtml += `</ul>`;
+          return sectionHtml;
+      };
+
+      html += renderSection("Traits", data.traits, t => `<strong style="color: var(--teal);">${t.trait}:</strong> ${t.context}`);
+      html += renderSection("Facts", data.facts, f => `<strong style="color: var(--blue);">[${f.category}]</strong> ${f.text}`);
+      html += renderSection("Opinions", data.opinions, o => `<strong>${o.topic}:</strong> ${o.text} <em style="color: var(--muted);">(${o.sentiment})</em>`);
+      html += renderSection("Events", data.events, e => `<strong>${e.date || 'Unknown Date'}${e.location ? ' @ ' + e.location : ''}:</strong> ${e.text}`);
+      html += renderSection("Relationships", data.relationships, r => `<strong>${r.person}</strong> <em style="color: var(--muted);">(${r.relation_type})</em>`);
+
+      profileModalContent.innerHTML = html || '<div style="text-align: center; color: var(--muted); padding: 20px;">No structured data extracted yet.</div>';
+    } catch (err) {
+      profileModalContent.innerHTML = `<div style="color: var(--danger); text-align: center; padding: 20px;">${err.message}</div>`;
+    }
+  });
+
+  profileModalClose.addEventListener("click", () => profileModalOverlay.style.display = "none");
+  profileModalOverlay.addEventListener("click", (e) => {
+    if (e.target === profileModalOverlay) profileModalOverlay.style.display = "none";
+  });
+
+  loadPersonas();
+</script>
+
+</body>
+</html>
