@@ -215,6 +215,8 @@
     </div>
     <label>Source material (docs, images, txt/md — you can select multiple)</label>
     <input type="file" id="modal-files" multiple />
+    <label>Voice sample (optional — upload mp3/wav to clone voice)</label>
+    <input type="file" id="modal-voice-file" accept="audio/*" />
     <label>Website links (optional — one per line)</label>
     <textarea id="modal-urls" placeholder="https://example.com/about-me&#10;https://example.com/blog-post" rows="3"></textarea>
     <div id="modal-actions">
@@ -439,15 +441,49 @@
     handle.row.appendChild(bar); return bar;
   }
 
-  let speakingUtterance = null; let speakingBtn = null;
+  let currentAudio = null; let speakingBtn = null;
   function toggleReadAloud(text, btn) {
-    if (!window.speechSynthesis) { showToast("Read aloud isn't supported"); return; }
-    const wasSpeaking = speakingBtn === btn; window.speechSynthesis.cancel();
+    const wasSpeaking = speakingBtn === btn;
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
     if (speakingBtn) { speakingBtn.textContent = "Listen"; speakingBtn.classList.remove("active"); }
-    speakingUtterance = null; speakingBtn = null; if (wasSpeaking) return;
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.onend = () => { if (speakingBtn === btn) { btn.textContent = "Listen"; btn.classList.remove("active"); speakingBtn = null; } };
-    speakingUtterance = utter; speakingBtn = btn; btn.textContent = "Stop"; btn.classList.add("active"); window.speechSynthesis.speak(utter);
+    speakingBtn = null;
+    if (wasSpeaking) return;
+
+    // Use our custom backend TTS with the persona ID. If it fails, fallback to browser TTS.
+    const url = `/api/tts?persona_id=${currentPersonaId}&text=${encodeURIComponent(text)}`;
+    
+    currentAudio = new Audio();
+    currentAudio.src = url;
+    currentAudio.headers = { "X-User-ID": ptUserId }; // Audio tags don't easily send custom headers, but fetch interception handles our API anyway? Wait, <audio> src doesn't go through window.fetch!
+    
+    // Instead of setting src directly (which skips our fetch monkeypatch and X-User-ID header), we fetch the blob.
+    speakingBtn = btn; btn.textContent = "Loading..."; btn.classList.add("active");
+    
+    fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error("No custom voice available.");
+        return res.blob();
+      })
+      .then(blob => {
+        if (speakingBtn !== btn) return; // User stopped it while loading
+        const blobUrl = URL.createObjectURL(blob);
+        currentAudio.src = blobUrl;
+        currentAudio.onended = () => { if (speakingBtn === btn) { btn.textContent = "Listen"; btn.classList.remove("active"); speakingBtn = null; } };
+        currentAudio.play();
+        btn.textContent = "Stop";
+      })
+      .catch(err => {
+        // Fallback to browser TTS if no custom voice cloned
+        console.warn(err);
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.onend = () => { if (speakingBtn === btn) { btn.textContent = "Listen"; btn.classList.remove("active"); speakingBtn = null; } };
+        btn.textContent = "Stop";
+        window.speechSynthesis.speak(utter);
+        currentAudio = { pause: () => window.speechSynthesis.cancel() }; // fake audio object to allow stopping
+      });
   }
 
   function addRetryButton(handle, chatId) {
@@ -529,7 +565,7 @@
 
   // New Persona
   document.getElementById("new-persona-btn").addEventListener("click", () => {
-    modalTitle.textContent = "New Persona"; modalNameGroup.style.display = "block"; modalName.value = ""; modalFiles.value = ""; modalUrls.value = "";
+    modalTitle.textContent = "New Persona"; modalNameGroup.style.display = "block"; modalName.value = ""; modalFiles.value = ""; document.getElementById("modal-voice-file").value = ""; modalUrls.value = "";
     document.getElementById("modal-create-btn").textContent = "Create"; openModal();
 
     modalCreateBtn.onclick = async () => {
@@ -538,7 +574,11 @@
       if ((!files || files.length === 0) && !urlsText) { modalError.textContent = "Please select at least one file or add a link."; modalError.style.display = "block"; return; }
 
       modalCreateBtn.disabled = true; modalCreateBtn.textContent = "Creating...";
-      const formData = new FormData(); if(files) for (const f of files) formData.append("files", f); formData.append("urls", urlsText);
+      const formData = new FormData(); 
+      if(files) for (const f of files) formData.append("files", f); 
+      formData.append("urls", urlsText);
+      const voiceFile = document.getElementById("modal-voice-file").files[0];
+      if (voiceFile) formData.append("voice_file", voiceFile);
 
       try {
         const res = await fetch(`/api/personas?name=${encodeURIComponent(name)}`, { method: "POST", body: formData });
