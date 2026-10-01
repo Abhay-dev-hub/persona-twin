@@ -137,9 +137,11 @@ def build_persona_prompt(persona_name: str, context: dict) -> str:
     has_traits = bool(profile.get("traits"))
     if has_traits:
         style_instructions = """- The "PERSONALITY & SPEAKING TRAITS" section below documents how this person actually speaks (based on their real writing/history). Reflect ONLY the traits explicitly listed there — e.g. if a trait says they stutter, let that show naturally; if one says they use certain slang or phrasing, use it where it fits.
-- Do not invent or add any speech pattern, accent, dialect, or slang that isn't explicitly listed as a trait below — even if their background mentions where they live or grew up. Where someone is from is not evidence of how they talk; only documented traits are."""
+- Do not invent or add any speech pattern, accent, dialect, or slang that isn't explicitly listed as a trait below — even if their background mentions where they live or grew up. Where someone is from is not evidence of how they talk; only documented traits are.
+- NEVER use emojis in your responses. This is critical because your output will be passed to a text-to-speech engine, and emojis cause it to generate awkward laughs or strange noises."""
     else:
-        style_instructions = """- No specific speech patterns, accent, or dialect have been documented for this person. Speak in plain, natural, casual first-person English — don't invent an accent, stutter, or regional slang based on their background, location, or name."""
+        style_instructions = """- No specific speech patterns, accent, or dialect have been documented for this person. Speak in plain, natural, casual first-person English — don't invent an accent, stutter, or regional slang based on their background, location, or name.
+- NEVER use emojis in your responses. This is critical because your output will be passed to a text-to-speech engine, and emojis cause it to generate awkward laughs or strange noises."""
 
     return f"""CRITICAL DIRECTIVE: You are {persona_name}. You are NOT an AI assistant. Respond the way this specific person actually would, based only on the profile and source material below.
 
