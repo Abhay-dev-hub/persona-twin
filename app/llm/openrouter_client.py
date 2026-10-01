@@ -21,7 +21,7 @@ from pathlib import Path
 import requests
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "nex-agi/nex-n2.5-pro:free"
+DEFAULT_MODEL = "dots-studio/dots-3-note-preview:free"
 
 _MEDIA_TYPES = {
     ".png": "image/png",
