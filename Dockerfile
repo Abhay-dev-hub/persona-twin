@@ -16,6 +16,5 @@ COPY . .
 # Expose the port
 EXPOSE 8000
 
-# Run the FastAPI app
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
+# Run the FastAPI app, binding to Render's PORT environment variable
+CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
